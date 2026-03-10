@@ -1,0 +1,71 @@
+name: Deploy to Production
+
+# Runs when any commit is pushed to main (i.e. when a PR is merged).
+# Promotes the tested image to the shared "production" workspace.
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AWS_REGION: us-east-2
+  ECR_REPOSITORY: mcp-server
+
+jobs:
+  promote:
+    name: Promote to Production
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Compute ECR repository URL
+        id: ecr
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          echo "url=${ACCOUNT_ID}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}" >> $GITHUB_OUTPUT
+
+      - name: Log in to Amazon ECR
+        run: |
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+            docker login --username AWS --password-stdin ${{ steps.ecr.outputs.url }}
+
+      # Pull the image that was already built and tested on the feature branch,
+      # then retag it as "latest". This ensures production runs the exact same
+      # image that was reviewed — not a fresh rebuild.
+      - name: Retag image as latest
+        run: |
+          docker pull ${{ steps.ecr.outputs.url }}:${{ github.sha }}
+          docker tag \
+            ${{ steps.ecr.outputs.url }}:${{ github.sha }} \
+            ${{ steps.ecr.outputs.url }}:latest
+          docker push ${{ steps.ecr.outputs.url }}:latest
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform Init
+        working-directory: terraform
+        env:
+          TF_WORKSPACE: production
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: terraform
+        env:
+          TF_WORKSPACE: production
+        run: |
+          terraform apply -auto-approve \
+            -var="deployer_name=production" \
+            -var="ecr_repository_url=${{ steps.ecr.outputs.url }}" \
+            -var="image_tag=latest"

@@ -1,0 +1,111 @@
+name: Deploy Preview Environment
+
+# Triggers on every push to any branch except main.
+# main has its own workflow (promote.yml).
+on:
+  push:
+    branches-ignore:
+      - main
+
+env:
+  AWS_REGION: us-east-2
+  ECR_REPOSITORY: mcp-server
+
+jobs:
+  deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Terraform workspace names cannot contain "/" or uppercase letters.
+      # We sanitize the branch name: "feature/natalie-tool" → "feature-natalie-tool"
+      - name: Derive workspace name from branch
+        id: workspace
+        run: |
+          WORKSPACE=$(echo "${{ github.ref_name }}" | sed 's/[/_]/-/g' | tr '[:upper:]' '[:lower:]')
+          echo "name=$WORKSPACE" >> $GITHUB_OUTPUT
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Compute the ECR URL from the AWS account ID so it doesn't need
+      # to be hardcoded as a secret. The format is always:
+      # {account_id}.dkr.ecr.{region}.amazonaws.com/{repo_name}
+      - name: Compute ECR repository URL
+        id: ecr
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ECR_URL="${ACCOUNT_ID}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/${{ env.ECR_REPOSITORY }}"
+          echo "url=$ECR_URL" >> $GITHUB_OUTPUT
+
+      - name: Log in to Amazon ECR
+        run: |
+          aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+            docker login --username AWS --password-stdin ${{ steps.ecr.outputs.url }}
+
+      # Tag with the commit SHA for an immutable, traceable image identifier.
+      - name: Build and push Docker image
+        id: build
+        run: |
+          IMAGE_URI="${{ steps.ecr.outputs.url }}:${{ github.sha }}"
+          docker build -t $IMAGE_URI ./mcp-server
+          docker push $IMAGE_URI
+          echo "image_uri=$IMAGE_URI" >> $GITHUB_OUTPUT
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform Init
+        working-directory: terraform
+        env:
+          TF_WORKSPACE: ${{ steps.workspace.outputs.name }}
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: terraform
+        env:
+          TF_WORKSPACE: ${{ steps.workspace.outputs.name }}
+        run: |
+          terraform apply -auto-approve \
+            -var="deployer_name=${{ steps.workspace.outputs.name }}" \
+            -var="ecr_repository_url=${{ steps.ecr.outputs.url }}" \
+            -var="image_tag=${{ github.sha }}"
+
+      - name: Get deployment outputs
+        id: tf-output
+        working-directory: terraform
+        env:
+          TF_WORKSPACE: ${{ steps.workspace.outputs.name }}
+        run: |
+          echo "lambda_url=$(terraform output -raw lambda_function_url)" >> $GITHUB_OUTPUT
+          echo "ec2_ip=$(terraform output -raw ec2_public_ip)" >> $GITHUB_OUTPUT
+
+      # Post a comment on the open PR with the deployed endpoints.
+      # This means no one has to dig through logs to find where their environment is.
+      - name: Comment deployment info on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: prs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              head: `${context.repo.owner}:${context.ref.replace('refs/heads/', '')}`,
+              state: 'open'
+            });
+            if (prs.length > 0) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prs[0].number,
+                body: `## Preview Environment Deployed\n\n| Resource | Endpoint |\n|---|---|\n| Lambda | \`${{ steps.tf-output.outputs.lambda_url }}\` |\n| EC2 | \`http://${{ steps.tf-output.outputs.ec2_ip }}:8080\` |\n| Image tag | \`${{ github.sha }}\` |\n| Workspace | \`${{ steps.workspace.outputs.name }}\` |\n\n_Deployed from commit ${{ github.sha }}_`
+              });
+            }

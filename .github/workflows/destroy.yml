@@ -1,0 +1,73 @@
+name: Destroy Preview Environment
+
+# Runs whenever a PR is closed — whether merged or manually closed.
+# This tears down the preview environment to stop AWS costs accumulating.
+on:
+  pull_request:
+    types: [closed]
+
+env:
+  AWS_REGION: us-east-2
+
+jobs:
+  destroy:
+    name: Destroy Environment
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # github.head_ref is the source branch of the PR (same one used in deploy.yml)
+      - name: Derive workspace name
+        id: workspace
+        run: |
+          WORKSPACE=$(echo "${{ github.head_ref }}" | sed 's/[/_]/-/g' | tr '[:upper:]' '[:lower:]')
+          echo "name=$WORKSPACE" >> $GITHUB_OUTPUT
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Compute ECR repository URL
+        id: ecr
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          echo "url=${ACCOUNT_ID}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/mcp-server" >> $GITHUB_OUTPUT
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: Terraform Init
+        working-directory: terraform
+        env:
+          TF_WORKSPACE: ${{ steps.workspace.outputs.name }}
+        run: terraform init
+
+      # Variable values don't matter for destroy — Terraform only needs them
+      # to satisfy the variable declarations, not to create anything.
+      - name: Terraform Destroy
+        working-directory: terraform
+        env:
+          TF_WORKSPACE: ${{ steps.workspace.outputs.name }}
+        run: |
+          terraform destroy -auto-approve \
+            -var="deployer_name=${{ steps.workspace.outputs.name }}" \
+            -var="ecr_repository_url=${{ steps.ecr.outputs.url }}" \
+            -var="image_tag=latest"
+
+      - name: Delete HCP Terraform workspace
+        env:
+          TF_TOKEN: ${{ secrets.TF_API_TOKEN }}
+        run: |
+          WORKSPACE_NAME="${{ steps.workspace.outputs.name }}"
+          ORG="Kaedens-Space"
+          curl -s -X DELETE \
+            -H "Authorization: Bearer $TF_TOKEN" \
+            -H "Content-Type: application/vnd.api+json" \
+            "https://app.terraform.io/api/v2/organizations/${ORG}/workspaces/${WORKSPACE_NAME}"
