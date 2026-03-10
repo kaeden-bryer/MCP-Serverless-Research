@@ -59,9 +59,10 @@ resource "aws_security_group" "mcp_server" {
 }
 
 resource "aws_instance" "mcp_server" {
-  ami                  = data.aws_ami.amazon_linux_2023.id
-  instance_type        = "t3.micro"
-  iam_instance_profile = aws_iam_instance_profile.ec2_exec.name
+  ami                         = data.aws_ami.amazon_linux_2023.id
+  instance_type               = "t3.micro"
+  iam_instance_profile        = aws_iam_instance_profile.ec2_exec.name
+  user_data_replace_on_change = true
 
   vpc_security_group_ids = [aws_security_group.mcp_server.id]
 

@@ -41,5 +41,22 @@ resource "aws_lambda_function" "mcp_server" {
 # without needing API Gateway.
 resource "aws_lambda_function_url" "mcp_server" {
   function_name      = aws_lambda_function.mcp_server.function_name
-  authorization_type = "NONE" # Public endpoint — no auth required for research
+  authorization_type = "NONE"
+  invoke_mode        = "RESPONSE_STREAM"
+}
+
+# As of Oct 2025, public Function URLs require both permissions.
+resource "aws_lambda_permission" "function_url_invoke" {
+  statement_id           = "FunctionURLAllowPublicAccess"
+  action                 = "lambda:InvokeFunctionUrl"
+  function_name          = aws_lambda_function.mcp_server.function_name
+  principal              = "*"
+  function_url_auth_type = "NONE"
+}
+
+resource "aws_lambda_permission" "function_url_invoke_function" {
+  statement_id  = "FunctionURLAllowPublicInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.mcp_server.function_name
+  principal     = "*"
 }

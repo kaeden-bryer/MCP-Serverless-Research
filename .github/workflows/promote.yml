@@ -81,4 +81,22 @@ jobs:
           terraform apply -auto-approve \
             -var="deployer_name=production" \
             -var="ecr_repository_url=${{ steps.ecr.outputs.url }}" \
-            -var="image_tag=latest"
+            -var="image_tag=${{ github.sha }}"
+
+      - name: Get deployment outputs
+        id: tf-output
+        working-directory: terraform
+        env:
+          TF_WORKSPACE: production
+        run: |
+          echo "lambda_url=$(terraform output -raw lambda_function_url)" >> $GITHUB_OUTPUT
+          echo "ec2_ip=$(terraform output -raw ec2_public_ip)" >> $GITHUB_OUTPUT
+
+      - name: Print deployment info
+        run: |
+          echo "## Production Deployment Complete"
+          echo "| Resource | Endpoint |"
+          echo "|---|---|"
+          echo "| Lambda | ${{ steps.tf-output.outputs.lambda_url }} |"
+          echo "| EC2 | http://${{ steps.tf-output.outputs.ec2_ip }}:8080 |"
+          echo "| Image tag | ${{ github.sha }} |"
