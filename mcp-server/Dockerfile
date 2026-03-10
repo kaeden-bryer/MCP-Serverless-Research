@@ -1,0 +1,25 @@
+# Lambda Web Adapter lets this same image run on both EC2 and AWS Lambda.
+# On EC2, the adapter binary is simply never invoked.
+# On Lambda, it translates Lambda invocation events into HTTP requests.
+FROM public.ecr.aws/awsguru/aws-lambda-web-adapter:0.8.4 AS lambda-adapter
+
+FROM python:3.12-slim
+
+COPY --from=lambda-adapter /lambda-adapter /opt/extensions/lambda-adapter
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY server.py .
+
+# PORT is read by the Lambda Web Adapter to know where to forward requests.
+# FASTMCP_HOST / FASTMCP_PORT configure the FastMCP SSE server.
+ENV PORT=8080
+ENV FASTMCP_HOST=0.0.0.0
+ENV FASTMCP_PORT=8080
+
+EXPOSE 8080
+
+CMD ["python", "server.py"]
