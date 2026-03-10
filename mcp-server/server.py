@@ -1,7 +1,6 @@
-import os
 from mcp.server.fastmcp import FastMCP
 
-mcp = FastMCP("MCP Research Server")
+mcp = FastMCP("MCP Research Server", host="0.0.0.0", port=8080)
 
 
 @mcp.tool()

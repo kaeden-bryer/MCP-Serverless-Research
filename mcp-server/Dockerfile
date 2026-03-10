@@ -14,11 +14,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY server.py .
 
-# PORT is read by the Lambda Web Adapter to know where to forward requests.
-# FASTMCP_HOST / FASTMCP_PORT configure the FastMCP SSE server.
+# PORT tells the Lambda Web Adapter where to forward requests.
+# Host/port for FastMCP are set in server.py directly.
 ENV PORT=8080
-ENV FASTMCP_HOST=0.0.0.0
-ENV FASTMCP_PORT=8080
 
 EXPOSE 8080
 
