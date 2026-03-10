@@ -1,0 +1,29 @@
+# Terraform local state and provider cache — never commit these
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+
+# Commit .terraform.lock.hcl to pin provider versions for reproducibility
+# (uncomment the line below only if you intentionally want to ignore it)
+# .terraform.lock.hcl
+
+# AWS credentials
+.aws/
+credentials
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.env
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
