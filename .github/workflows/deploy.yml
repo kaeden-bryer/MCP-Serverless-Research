@@ -64,6 +64,21 @@ jobs:
         with:
           cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
 
+      - name: Ensure HCP Terraform workspace exists
+        run: |
+          WORKSPACE="${{ steps.workspace.outputs.name }}"
+          ORG="Kaedens-Space"
+          STATUS=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer ${{ secrets.TF_API_TOKEN }}" \
+            "https://app.terraform.io/api/v2/organizations/${ORG}/workspaces/${WORKSPACE}")
+          if [ "$STATUS" != "200" ]; then
+            curl -s --fail-with-body \
+              -H "Authorization: Bearer ${{ secrets.TF_API_TOKEN }}" \
+              -H "Content-Type: application/vnd.api+json" \
+              -d "{\"data\":{\"type\":\"workspaces\",\"attributes\":{\"name\":\"${WORKSPACE}\",\"execution-mode\":\"local\"}}}" \
+              "https://app.terraform.io/api/v2/organizations/${ORG}/workspaces"
+          fi
+
       - name: Terraform Init
         working-directory: terraform
         env:
