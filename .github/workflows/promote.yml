@@ -1,7 +1,7 @@
 name: Deploy to Production
 
 # Runs when any commit is pushed to main (i.e. when a PR is merged).
-# Promotes the tested image to the shared "production" workspace.
+# Builds from the merge commit and deploys to the "production" workspace.
 on:
   push:
     branches:
@@ -38,15 +38,13 @@ jobs:
           aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
             docker login --username AWS --password-stdin ${{ steps.ecr.outputs.url }}
 
-      # Pull the image that was already built and tested on the feature branch,
-      # then retag it as "latest". This ensures production runs the exact same
-      # image that was reviewed — not a fresh rebuild.
-      - name: Retag image as latest
+      # Build from the merge commit (the canonical source of truth for production)
+      # and push with both the SHA tag and "latest".
+      - name: Build and push Docker image
         run: |
-          docker pull ${{ steps.ecr.outputs.url }}:${{ github.sha }}
-          docker tag \
-            ${{ steps.ecr.outputs.url }}:${{ github.sha }} \
-            ${{ steps.ecr.outputs.url }}:latest
+          docker build -t ${{ steps.ecr.outputs.url }}:${{ github.sha }} ./mcp-server
+          docker tag ${{ steps.ecr.outputs.url }}:${{ github.sha }} ${{ steps.ecr.outputs.url }}:latest
+          docker push ${{ steps.ecr.outputs.url }}:${{ github.sha }}
           docker push ${{ steps.ecr.outputs.url }}:latest
 
       - name: Setup Terraform
