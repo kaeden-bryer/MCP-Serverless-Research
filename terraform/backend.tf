@@ -7,7 +7,9 @@ terraform {
       # The workspace name is set dynamically via the TF_WORKSPACE env var
       # in CI (derived from the branch name). Locally, export TF_WORKSPACE
       # before running terraform commands.
-      # HCP Terraform auto-creates the workspace on first init.
+      # CI workflows create the workspace via the HCP Terraform API if it
+      # doesn't already exist (see the "Ensure HCP Terraform workspace exists"
+      # step in each workflow).
     }
   }
 
