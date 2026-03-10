@@ -1,7 +1,7 @@
 # Lambda Web Adapter lets this same image run on both EC2 and AWS Lambda.
 # On EC2, the adapter binary is simply never invoked.
 # On Lambda, it translates Lambda invocation events into HTTP requests.
-FROM public.ecr.aws/awsguru/aws-lambda-web-adapter:0.8.4 AS lambda-adapter
+FROM public.ecr.aws/awsguru/aws-lambda-adapter:0.9.1 AS lambda-adapter
 
 FROM python:3.12-slim
 
