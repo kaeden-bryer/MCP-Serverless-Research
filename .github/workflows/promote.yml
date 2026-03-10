@@ -56,16 +56,14 @@ jobs:
 
       - name: Terraform Init
         working-directory: terraform
+        env:
+          TF_WORKSPACE: production
         run: terraform init
-
-      - name: Select or create production workspace
-        working-directory: terraform
-        run: |
-          terraform workspace select production \
-            || terraform workspace new production
 
       - name: Terraform Apply
         working-directory: terraform
+        env:
+          TF_WORKSPACE: production
         run: |
           terraform apply -auto-approve \
             -var="deployer_name=production" \

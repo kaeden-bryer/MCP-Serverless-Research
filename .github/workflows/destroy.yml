@@ -45,25 +45,29 @@ jobs:
 
       - name: Terraform Init
         working-directory: terraform
+        env:
+          TF_WORKSPACE: ${{ steps.workspace.outputs.name }}
         run: terraform init
-
-      - name: Select workspace
-        working-directory: terraform
-        run: terraform workspace select ${{ steps.workspace.outputs.name }}
 
       # Variable values don't matter for destroy — Terraform only needs them
       # to satisfy the variable declarations, not to create anything.
       - name: Terraform Destroy
         working-directory: terraform
+        env:
+          TF_WORKSPACE: ${{ steps.workspace.outputs.name }}
         run: |
           terraform destroy -auto-approve \
             -var="deployer_name=${{ steps.workspace.outputs.name }}" \
             -var="ecr_repository_url=${{ steps.ecr.outputs.url }}" \
             -var="image_tag=latest"
 
-      # Switch to default before deleting so Terraform doesn't error.
-      - name: Delete Terraform workspace
-        working-directory: terraform
+      - name: Delete HCP Terraform workspace
+        env:
+          TF_TOKEN: ${{ secrets.TF_API_TOKEN }}
         run: |
-          terraform workspace select default
-          terraform workspace delete ${{ steps.workspace.outputs.name }}
+          WORKSPACE_NAME="${{ steps.workspace.outputs.name }}"
+          ORG="Kaedens-Space"
+          curl -s -X DELETE \
+            -H "Authorization: Bearer $TF_TOKEN" \
+            -H "Content-Type: application/vnd.api+json" \
+            "https://app.terraform.io/api/v2/organizations/${ORG}/workspaces/${WORKSPACE_NAME}"
