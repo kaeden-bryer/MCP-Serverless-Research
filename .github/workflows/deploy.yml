@@ -66,18 +66,14 @@ jobs:
 
       - name: Terraform Init
         working-directory: terraform
+        env:
+          TF_WORKSPACE: ${{ steps.workspace.outputs.name }}
         run: terraform init
-
-      # Select the workspace for this branch, or create it if it doesn't exist yet.
-      # The "|| terraform workspace new" makes this step idempotent.
-      - name: Select or create Terraform workspace
-        working-directory: terraform
-        run: |
-          terraform workspace select ${{ steps.workspace.outputs.name }} \
-            || terraform workspace new ${{ steps.workspace.outputs.name }}
 
       - name: Terraform Apply
         working-directory: terraform
+        env:
+          TF_WORKSPACE: ${{ steps.workspace.outputs.name }}
         run: |
           terraform apply -auto-approve \
             -var="deployer_name=${{ steps.workspace.outputs.name }}" \
@@ -87,6 +83,8 @@ jobs:
       - name: Get deployment outputs
         id: tf-output
         working-directory: terraform
+        env:
+          TF_WORKSPACE: ${{ steps.workspace.outputs.name }}
         run: |
           echo "lambda_url=$(terraform output -raw lambda_function_url)" >> $GITHUB_OUTPUT
           echo "ec2_ip=$(terraform output -raw ec2_public_ip)" >> $GITHUB_OUTPUT

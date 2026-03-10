@@ -4,10 +4,10 @@ terraform {
     organization = "Kaedens-Space"
 
     workspaces {
-      # "tags" mode lets each person create their own workspace via:
-      #   terraform workspace new <name>
-      # All workspaces tagged "mcp-server" appear in this HCP project.
-      tags = ["mcp-server"]
+      # The workspace name is set dynamically via the TF_WORKSPACE env var
+      # in CI (derived from the branch name). Locally, export TF_WORKSPACE
+      # before running terraform commands.
+      # HCP Terraform auto-creates the workspace on first init.
     }
   }
 
